@@ -73,3 +73,10 @@ python deardata.py flowers.csv # to specify
 
 The application opens an ImGui window. Use it to run the cleaning pipeline and inspect the CleaningReport and View the
 generated ExecutiveSummary metrics and report text.
+
+## Notes
+
+Supplied datasets:
+
+- flowers.csv - https://huggingface.co/datasets/scikit-learn/iris
+- data.csv - dataset that was provided with lab1 examples

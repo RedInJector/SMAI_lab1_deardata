@@ -839,7 +839,6 @@ def main() -> None:
 
         imgui.new_frame()
 
-        show_test_window()
         draw_ui(state)
 
         gl.glClearColor(0.1, 0.1, 0.1, 1)
