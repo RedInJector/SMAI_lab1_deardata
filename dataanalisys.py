@@ -1,19 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from dataclasses import dataclass, field
+import argparse
 import sys
 
-from imgui.integrations.glfw import GlfwRenderer
 import glfw
 import imgui
 import numpy as np
 import OpenGL.GL as gl
 import pandas as pd
+
 from testwindow import show_test_window
-
-CSV_FILE = "data.csv"
-
+from imgui.integrations.glfw import GlfwRenderer
+from dataclasses import dataclass, field
 
 @dataclass
 class CleaningReport:
@@ -82,7 +81,12 @@ class DataCleaner:
         self.report.duplicates_removed = int(self.data.duplicated().sum())
         self.data = self.data.drop_duplicates().reset_index(drop=True)
 
+    def drop_id_column(self) -> None:
+        cols_to_drop = [col for col in self.data.columns if col.lower() == "id"]
+        self.data = self.data.drop(columns=cols_to_drop)
+
     def clean(self) -> pd.DataFrame:
+        self.drop_id_column()
         self.handle_missing_values()
         self.remove_duplicates()
         self.convert_types()
@@ -104,7 +108,7 @@ def generate_executive_summary(
 
     report = cleaner.report
 
-    # --- E.2 Dynamic Text Report ---
+    # --- Dynamic Text Report ---
     summary.report_text = (
         f"Data Processing Summary for Dataset ({summary.total_rows} rows x {summary.total_cols} columns):\n"
         f"- Missing Values: {report.missing_before} original missing values were detected. "
@@ -114,7 +118,7 @@ def generate_executive_summary(
         f"and mode imputation on categorical fields."
     )
 
-    # --- E.3 Dynamic Findings Generator ---
+    # --- Dynamic Findings Generator ---
     findings = []
 
     # Finding 1: Top numeric column driver
@@ -174,7 +178,7 @@ def generate_executive_summary(
 
     summary.findings = findings
 
-    # --- E.4 Dynamic Conclusion ---
+    # --- Dynamic Conclusion ---
     if numeric_cols:
         summary.conclusion_text = (
             f"What the data reveals: The dataset contains {summary.total_rows} verified records. "
@@ -187,39 +191,70 @@ def generate_executive_summary(
 
     return summary
 
-# --- Data Initialization ---
-raw_df = pd.read_csv(CSV_FILE)
-cleaner = DataCleaner(raw_df)
-cleaned_df = cleaner.clean()
 
-numeric_columns = cleaned_df.select_dtypes(include="number").columns.tolist()
-category_columns = cleaned_df.select_dtypes(
-    include=["object", "category", "string", "bool"]
-).columns.tolist()
+@dataclass
+class AppState:
+    csv_file: str = "data.csv"
+    raw_df: pd.DataFrame = field(default_factory=pd.DataFrame)
+    cleaned_df: pd.DataFrame = field(default_factory=pd.DataFrame)
+    cleaner: DataCleaner = field(default_factory=lambda: DataCleaner(pd.DataFrame()))
+    exec_summary: ExecutiveSummary = field(default_factory=ExecutiveSummary)
 
-# Global widget states
-filter_column_a = numeric_columns[0] if numeric_columns else ""
-filter_column_b = (
-    numeric_columns[1] if len(numeric_columns) > 1 else filter_column_a
-)
-filter_value_a = 0.0
-filter_value_b = 0.0
+    # Column lists
+    numeric_columns: list[str] = field(default_factory=list)
+    category_columns: list[str] = field(default_factory=list)
 
-group_column = category_columns[0] if category_columns else ""
-aggregate_column = numeric_columns[0] if numeric_columns else ""
-aggregate_method = "mean"
+    # UI Filters & Selectors
+    filter_column_a: str = ""
+    filter_column_b: str = ""
+    filter_value_a: float = 0.0
+    filter_value_b: float = 0.0
 
-ranking_column = numeric_columns[0] if numeric_columns else ""
-trend_column = numeric_columns[0] if numeric_columns else ""
+    group_column: str = ""
+    aggregate_column: str = ""
+    aggregate_method: str = "mean"
 
-numpy_column_a = numeric_columns[0] if numeric_columns else ""
-numpy_column_b = (
-    numeric_columns[1] if len(numeric_columns) > 1 else numpy_column_a
-)
-numpy_threshold = 0.0
-numpy_category_column = numeric_columns[0] if numeric_columns else ""
+    ranking_column: str = ""
+    trend_column: str = ""
 
-exec_summary = generate_executive_summary(cleaned_df, cleaner)
+    numpy_column_a: str = ""
+    numpy_column_b: str = ""
+    numpy_threshold: float = 0.0
+    numpy_category_column: str = ""
+
+    @classmethod
+    def load(cls, filepath: str) -> "AppState":
+        raw_df = pd.read_csv(filepath)
+        cleaner = DataCleaner(raw_df)
+        cleaned_df = cleaner.clean()
+
+        num_cols = cleaned_df.select_dtypes(include="number").columns.tolist()
+        cat_cols = cleaned_df.select_dtypes(
+            include=["object", "category", "string", "bool"]
+        ).columns.tolist()
+
+        col_a = num_cols[0] if num_cols else ""
+        col_b = num_cols[1] if len(num_cols) > 1 else col_a
+        cat_col = cat_cols[0] if cat_cols else ""
+
+        return cls(
+            csv_file=filepath,
+            raw_df=raw_df,
+            cleaned_df=cleaned_df,
+            cleaner=cleaner,
+            exec_summary=generate_executive_summary(cleaned_df, cleaner),
+            numeric_columns=num_cols,
+            category_columns=cat_cols,
+            filter_column_a=col_a,
+            filter_column_b=col_b,
+            group_column=cat_col,
+            aggregate_column=col_a,
+            ranking_column=col_a,
+            trend_column=col_a,
+            numpy_column_a=col_a,
+            numpy_column_b=col_b,
+            numpy_category_column=col_a,
+        )
 
 
 def format_cell(value, decimals: int = 4) -> str:
@@ -288,21 +323,21 @@ def draw_column_info(data: pd.DataFrame) -> None:
         metadata.itertuples(index=False, name=None),
     )
 
-def explore_data() -> None:
+def draw_explore_data(state: AppState) -> None:
     imgui.text("Dataset Overview")
-    draw_overview(cleaned_df)
+    draw_overview(state.cleaned_df)
 
     imgui.text("First Five Rows")
     draw_table(
-        cleaned_df.columns.tolist(),
-        cleaned_df.head().itertuples(index=False, name=None),
+        state.cleaned_df.columns.tolist(),
+        state.cleaned_df.head().itertuples(index=False, name=None),
     )
 
     imgui.text("Column Information")
-    draw_column_info(cleaned_df)
+    draw_column_info(state.cleaned_df)
 
-def draw_report() -> None:
-    report = cleaner.report
+def draw_report(state: AppState) -> None:
+    report = state.cleaner.report
 
     imgui.text("Missing values")
     imgui.bullet_text(f"Before: {report.missing_before}")
@@ -322,8 +357,8 @@ def draw_report() -> None:
     for column in report.converted_columns:
         imgui.bullet_text(column)
 
-def draw_preview() -> None:
-    preview = cleaned_df.head()
+def draw_preview(state: AppState) -> None:
+    preview = state.cleaned_df.head()
     if preview.empty:
         imgui.text("No rows to display.")
         return
@@ -331,44 +366,42 @@ def draw_preview() -> None:
         preview.columns.tolist(), preview.itertuples(index=False, name=None)
     )
 
-def draw_summary() -> None:
+def draw_summary(state: AppState) -> None:
     imgui.text("Summary Statistics")
-    if not numeric_columns:
+    if not state.numeric_columns:
         imgui.text("No numerical columns found.")
         return
 
-    summary = cleaned_df[numeric_columns].describe().T.reset_index()
+    summary = state.cleaned_df[state.numeric_columns].describe().T.reset_index()
     summary = summary.rename(columns={"index": "Column"})
     draw_table(
         summary.columns.tolist(), summary.itertuples(index=False, name=None)
     )
 
-def draw_filter() -> None:
-    global filter_column_a, filter_column_b, filter_value_a, filter_value_b
-
+def draw_filter(state:AppState) -> None:
     imgui.text("Filter Rows (two conditions)")
 
-    if len(numeric_columns) < 2:
+    if len(state.numeric_columns) < 2:
         imgui.text("At least two numerical columns are required.")
         return
 
-    filter_column_a = draw_combo(
-        "First column", numeric_columns, filter_column_a
+    state.filter_column_a = draw_combo(
+        "First column", state.numeric_columns, state.filter_column_a
     )
-    filter_column_b = draw_combo(
-        "Second column", numeric_columns, filter_column_b
-    )
-
-    _, filter_value_a = imgui.input_float(
-        "Minimum " + filter_column_a, filter_value_a
-    )
-    _, filter_value_b = imgui.input_float(
-        "Minimum " + filter_column_b, filter_value_b
+    state.filter_column_b = draw_combo(
+        "Second column", state.numeric_columns, state.filter_column_b
     )
 
-    filtered = cleaned_df[
-        (cleaned_df[filter_column_a] >= filter_value_a)
-        & (cleaned_df[filter_column_b] >= filter_value_b)
+    _, state.filter_value_a = imgui.input_float(
+        "Minimum " + state.filter_column_a, state.filter_value_a
+    )
+    _, state.filter_value_b = imgui.input_float(
+        "Minimum " + state.filter_column_b, state.filter_value_b
+    )
+
+    filtered = state.cleaned_df[
+        (state.cleaned_df[state.filter_column_a] >= state.filter_value_a)
+        & (state.cleaned_df[state.filter_column_b] >= state.filter_value_b)
     ]
 
     imgui.text(f"Matching rows: {len(filtered)}")
@@ -377,28 +410,27 @@ def draw_filter() -> None:
         filtered.head(10).itertuples(index=False, name=None),
     )
 
-def draw_group_analysis() -> None:
+def draw_group_analysis(state: AppState) -> None:
     imgui.text("Group and Aggregate")
 
-    if not category_columns or not numeric_columns:
+    if not state.category_columns or not state.numeric_columns:
         imgui.text("Requires a categorical and a numerical column.")
         return
 
-    global group_column, aggregate_column, aggregate_method
 
-    group_column = draw_combo("Group by", category_columns, group_column)
-    aggregate_column = draw_combo(
-        "Aggregate column", numeric_columns, aggregate_column
+    state.group_column = draw_combo("Group by", state.category_columns, state.group_column)
+    state.aggregate_column = draw_combo(
+        "Aggregate column", state.numeric_columns, state.aggregate_column
     )
-    aggregate_method = draw_combo(
-        "Aggregation", ["mean", "sum", "count"], aggregate_method
+    state.aggregate_method = draw_combo(
+        "Aggregation", ["mean", "sum", "count"], state.aggregate_method
     )
 
     grouped = (
-        cleaned_df.groupby(group_column, dropna=False)[aggregate_column]
-        .agg(aggregate_method)
+        state.cleaned_df.groupby(state.group_column, dropna=False)[state.aggregate_column]
+        .agg(state.aggregate_method)
         .reset_index()
-        .sort_values(aggregate_column, ascending=False)
+        .sort_values(state.aggregate_column, ascending=False)
     )
 
     draw_table(
@@ -406,32 +438,30 @@ def draw_group_analysis() -> None:
         grouped.head(20).itertuples(index=False, name=None),
     )
 
-def draw_top_five() -> None:
+def draw_top_five(state: AppState) -> None:
     imgui.text("Top Five Records")
 
-    if not numeric_columns:
+    if not state.numeric_columns:
         imgui.text("No numerical columns found.")
         return
 
-    global ranking_column
-    ranking_column = draw_combo("Rank by", numeric_columns, ranking_column)
+    state.ranking_column = draw_combo("Rank by", state.numeric_columns, state.ranking_column)
 
-    top = cleaned_df.nlargest(5, ranking_column)
+    top = state.cleaned_df.nlargest(5, state.ranking_column)
     draw_table(top.columns.tolist(), top.itertuples(index=False, name=None))
 
-def draw_trend() -> None:
+def draw_trend(state: AppState) -> None:
     imgui.text("Trend / Pattern")
 
-    if not numeric_columns:
+    if not state.numeric_columns:
         imgui.text("No numerical columns available for trend analysis.")
         return
 
-    global trend_column
-    trend_column = draw_combo(
-        "Analyze distribution", numeric_columns, trend_column
+    state.trend_column = draw_combo(
+        "Analyze distribution", state.numeric_columns, state.trend_column
     )
 
-    values = cleaned_df[trend_column].dropna()
+    values = state.cleaned_df[state.trend_column].dropna()
     if values.empty:
         imgui.text("No valid values to analyze.")
         return
@@ -458,35 +488,34 @@ def draw_trend() -> None:
     else:
         imgui.text("Values show measurable variation.")
 
-def draw_data_analysis() -> None:
+def draw_data_analysis(state: AppState) -> None:
     imgui.text("1. Summary Statistics")
-    draw_summary()
+    draw_summary(state)
 
     imgui.text("2. Filter with Two Conditions")
-    draw_filter()
+    draw_filter(state)
 
     imgui.text("3. Group and Aggregate")
-    draw_group_analysis()
+    draw_group_analysis(state)
 
     imgui.text("4. Top Five Records")
-    draw_top_five()
+    draw_top_five(state)
 
     imgui.text("5. Trend / Pattern")
-    draw_trend()
+    draw_trend(state)
 
-# --- NumPy Handlers ---
-def draw_numpy_statistics(data: pd.DataFrame) -> None:
-    global numpy_column_a
+# --- NumPy ---
+def draw_numpy_statistics(state: AppState, data: pd.DataFrame) -> None:
     imgui.text("1. NumPy Basic Statistics")
 
-    numpy_column_a = draw_combo(
-        "Select target column", numeric_columns, numpy_column_a
+    state.numpy_column_a = draw_combo(
+        "Select target column", state.numeric_columns, state.numpy_column_a
     )
-    if not numpy_column_a or numpy_column_a not in data.columns:
+    if not state.numpy_column_a or state.numpy_column_a not in data.columns:
         imgui.text("No valid numerical column selected.")
         return
 
-    arr = data[numpy_column_a].dropna().to_numpy()
+    arr = data[state.numpy_column_a].dropna().to_numpy()
     if arr.size == 0:
         imgui.text("Column contains no valid numeric values.")
         return
@@ -495,13 +524,13 @@ def draw_numpy_statistics(data: pd.DataFrame) -> None:
     imgui.bullet_text(f"np.median(): {np.median(arr):.4f}")
     imgui.bullet_text(f"np.std(): {np.std(arr):.4f}")
 
-def draw_numpy_normalization(data: pd.DataFrame) -> None:
+def draw_numpy_normalization(state: AppState, data: pd.DataFrame) -> None:
     imgui.text("2. Min-Max Normalization (NumPy)")
 
-    if not numpy_column_a or numpy_column_a not in data.columns:
+    if not state.numpy_column_a or state.numpy_column_a not in data.columns:
         return
 
-    arr = data[numpy_column_a].dropna().to_numpy()
+    arr = data[state.numpy_column_a].dropna().to_numpy()
     min_val, max_val = np.min(arr), np.max(arr)
 
     if max_val == min_val:
@@ -521,55 +550,53 @@ def draw_numpy_normalization(data: pd.DataFrame) -> None:
     ]
     draw_table(["Row", "Original Value", "Normalized Value"], preview_rows)
 
-def draw_numpy_conditional(data: pd.DataFrame) -> None:
-    global numpy_threshold, numpy_category_column
+def draw_numpy_conditional(state: AppState, data: pd.DataFrame) -> None:
     imgui.text("3 & 4. Thresholding & Conditional Column Creation (np.where)")
 
-    numpy_category_column = draw_combo(
-        "Target column", numeric_columns, numpy_category_column
+    state.numpy_category_column = draw_combo(
+        "Target column", state.numeric_columns, state.numpy_category_column
     )
-    if not numpy_category_column or numpy_category_column not in data.columns:
+    if not state.numpy_category_column or state.numpy_category_column not in data.columns:
         return
 
-    _, numpy_threshold = imgui.input_float("Threshold Value", numpy_threshold)
+    _, state.numpy_threshold = imgui.input_float("Threshold Value", state.numpy_threshold)
 
-    arr = data[numpy_category_column].to_numpy()
-    above_count = np.count_nonzero(arr > numpy_threshold)
+    arr = data[state.numpy_category_column].to_numpy()
+    above_count = np.count_nonzero(arr > state.numpy_threshold)
     below_count = arr.size - above_count
 
-    imgui.bullet_text(f"Values above {numpy_threshold:.2f}: {above_count}")
+    imgui.bullet_text(f"Values above {state.numpy_threshold:.2f}: {above_count}")
     imgui.bullet_text(
-        f"Values at or below {numpy_threshold:.2f}: {below_count}"
+        f"Values at or below {state.numpy_threshold:.2f}: {below_count}"
     )
 
-    new_col_name = f"{numpy_category_column}_category"
-    data[new_col_name] = np.where(arr > numpy_threshold, "High", "Low")
+    new_col_name = f"{state.numpy_category_column}_category"
+    data[new_col_name] = np.where(arr > state.numpy_threshold, "High", "Low")
 
     imgui.text(f"Updated DataFrame preview with column '{new_col_name}':")
-    preview_cols = [numpy_category_column, new_col_name]
+    preview_cols = [state.numpy_category_column, new_col_name]
     draw_table(
         preview_cols,
         data[preview_cols].head(5).itertuples(index=False, name=None),
     )
 
-def draw_numpy_correlation(data: pd.DataFrame) -> None:
-    global numpy_column_a, numpy_column_b
+def draw_numpy_correlation(state: AppState, data: pd.DataFrame) -> None:
     imgui.text("5. Correlation Analysis (np.corrcoef)")
 
-    if len(numeric_columns) < 2:
+    if len(state.numeric_columns) < 2:
         imgui.text("Requires at least two numeric columns.")
         return
 
-    numpy_column_a = draw_combo("Column A", numeric_columns, numpy_column_a)
-    numpy_column_b = draw_combo("Column B", numeric_columns, numpy_column_b)
+    state.numpy_column_a = draw_combo("Column A", state.numeric_columns, state.numpy_column_a)
+    state.numpy_column_b = draw_combo("Column B", state.numeric_columns, state.numpy_column_b)
 
-    if numpy_column_a == numpy_column_b:
+    if state.numpy_column_a == state.numpy_column_b:
         imgui.text("Select two distinct columns to calculate correlation.")
         return
 
-    clean_pair = data[[numpy_column_a, numpy_column_b]].dropna()
-    arr_a = clean_pair[numpy_column_a].to_numpy()
-    arr_b = clean_pair[numpy_column_b].to_numpy()
+    clean_pair = data[[state.numpy_column_a, state.numpy_column_b]].dropna()
+    arr_a = clean_pair[state.numpy_column_a].to_numpy()
+    arr_b = clean_pair[state.numpy_column_b].to_numpy()
 
     if arr_a.size == 0:
         imgui.text("No valid common records between selected columns.")
@@ -587,16 +614,16 @@ def draw_numpy_correlation(data: pd.DataFrame) -> None:
     else:
         imgui.text("Pattern: Weak or no linear relationship detected.")
 
-def draw_numpy_analysis() -> None:
-    draw_numpy_statistics(cleaned_df)
+def draw_numpy_analysis(state: AppState) -> None:
+    draw_numpy_statistics(state, state.cleaned_df)
     imgui.separator()
-    draw_numpy_normalization(cleaned_df)
+    draw_numpy_normalization(state, state.cleaned_df)
     imgui.separator()
-    draw_numpy_conditional(cleaned_df)
+    draw_numpy_conditional(state, state.cleaned_df)
     imgui.separator()
-    draw_numpy_correlation(cleaned_df)
+    draw_numpy_correlation(state, state.cleaned_df)
 
-def draw_results_presentation() -> None:
+def draw_results_presentation(state: AppState) -> None:
     """Part E: Present dynamic summary metrics, text reports, findings, and conclusions."""
 
     # E.1: At least three useful summary metrics (Dynamic)
@@ -605,15 +632,15 @@ def draw_results_presentation() -> None:
     imgui.columns(3, "##summary_metrics", False)
 
     imgui.text("Total Dataset Size")
-    imgui.bullet_text(f"{exec_summary.total_rows} Rows")
+    imgui.bullet_text(f"{state.exec_summary.total_rows} Rows")
     imgui.next_column()
 
     imgui.text("Primary Driver")
-    imgui.bullet_text(f"{exec_summary.top_column}")
+    imgui.bullet_text(f"{state.exec_summary.top_column}")
     imgui.next_column()
 
     imgui.text("Data Quality")
-    imgui.bullet_text(f"{exec_summary.total_imputed} Cols Imputed")
+    imgui.bullet_text(f"{state.exec_summary.total_imputed} Cols Imputed")
     imgui.next_column()
 
     imgui.columns(1)
@@ -621,13 +648,13 @@ def draw_results_presentation() -> None:
 
     # E.2: Dynamic Text-Based Report
     if imgui.collapsing_header("Detailed Data Cleaning & Profile Report")[0]:
-        imgui.text_wrapped(exec_summary.report_text)
+        imgui.text_wrapped(state.exec_summary.report_text)
 
     # E.3: Dynamic Plain English Findings
     if imgui.collapsing_header("Key Dataset Findings")[0]:
         imgui.text_colored("Key Analytical Insights:", 0.2, 0.9, 0.4)
 
-        for title, detail in exec_summary.findings:
+        for title, detail in state.exec_summary.findings:
             imgui.bullet_text(title)
             imgui.indent()
             imgui.text_wrapped(detail)
@@ -636,10 +663,10 @@ def draw_results_presentation() -> None:
     # E.4: Dynamic Conclusion
     if imgui.collapsing_header("Conclusion")[0]:
         imgui.text_colored("Summary & Practical Takeaways", 0.9, 0.8, 0.3)
-        imgui.text_wrapped(exec_summary.conclusion_text)
+        imgui.text_wrapped(state.exec_summary.conclusion_text)
 
 
-def draw_ui() -> None:
+def draw_ui(state: AppState) -> None:
     viewport = imgui.get_main_viewport()
 
     imgui.set_next_window_position(viewport.pos.x, viewport.pos.y)
@@ -652,18 +679,18 @@ def draw_ui() -> None:
         | imgui.WINDOW_NO_BRING_TO_FRONT_ON_FOCUS
     )
 
-    imgui.begin(CSV_FILE, flags=flags)
+    imgui.begin(state.csv_file, flags=flags)
 
-    draw_section("Part A - Explore Data", explore_data)
-    draw_section("Part B - Cleaning Report", draw_report)
-    draw_section("Cleaned Data Preview", draw_preview)
-    draw_section("Part C - Data Analysis", draw_data_analysis)
-    draw_section("Part D - Numpy Analysis", draw_numpy_analysis)
-    draw_section("Part E - Present Results", draw_results_presentation)
+    draw_section("Part A - Explore Data", lambda: draw_explore_data(state))
+    draw_section("Part B - Cleaning Report", lambda: draw_report(state))
+    draw_section("Cleaned Data Preview", lambda: draw_preview(state))
+    draw_section("Part C - Data Analysis", lambda: draw_data_analysis(state))
+    draw_section("Part D - Numpy Analysis", lambda: draw_numpy_analysis(state))
+    draw_section("Part E - Present Results", lambda: draw_results_presentation(state))
 
     imgui.end()
 
-def impl_glfw_init():
+def impl_glfw_init() -> None:
     width, height = 1280, 720
     window_name = "Data Explorer"
 
@@ -687,10 +714,46 @@ def impl_glfw_init():
     glfw.make_context_current(window)
     return window
 
-def main():
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Interactive Data Cleaner and Explorer using PyImgui."
+    )
+    parser.add_argument(
+        "csv_file",
+        nargs="?",
+        default="data.csv",
+        help="Path to the CSV file (defaults to 'data.csv' if not specified).",
+    )
+    return parser.parse_args()
+
+
+def setup_fonts():
+    io = imgui.get_io()
+    io.fonts.clear()
+
+    # Load a TTF font at size 18px (adjust path to a font present on your system)
+    # On Windows: "C:\\Windows\\Fonts\\segoeui.ttf" or "arial.ttf"
+    # On Linux: "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    io.fonts.add_font_from_file_ttf(
+        "JetBrainsMono-Medium.ttf", 23.0
+    )
+
+def main() -> None:
+    args = parse_args()
+
+    try:
+        state = AppState.load(args.csv_file)
+    except FileNotFoundError:
+        print(f"Error: File '{args.csv_file}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+
     imgui.create_context()
     window = impl_glfw_init()
     impl = GlfwRenderer(window)
+
+    setup_fonts()
+    impl.refresh_font_texture()
 
     glfw.swap_interval(1)
 
@@ -701,7 +764,7 @@ def main():
         imgui.new_frame()
 
         show_test_window()
-        draw_ui()
+        draw_ui(state)
 
         gl.glClearColor(0.1, 0.1, 0.1, 1)
         gl.glClear(gl.GL_COLOR_BUFFER_BIT)
@@ -712,6 +775,8 @@ def main():
 
     impl.shutdown()
     glfw.terminate()
+
+
 
 if __name__ == "__main__":
     main()
