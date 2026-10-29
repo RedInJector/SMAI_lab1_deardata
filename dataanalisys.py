@@ -11,10 +11,9 @@ import sys
 import pandas as pd
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from pathlib import Path
-
-
-CSV_FILE = "data.csv"
 
 
 @dataclass
@@ -76,17 +75,9 @@ class DataCleaner:
         self.convert_types()
         return self.data
 
-def load_data(file_path):
-    try:
-        df = pd.read_csv(file_path)
-        return df, None
-    except Exception as exc:
-        return None, str(exc)
+CSV_FILE = "data.csv"
 
-df = pd.read_csv("data.csv")
-
-df = pd.read_csv(Path("data.csv"))
-
+df = pd.read_csv(CSV_FILE)
 cleaner = DataCleaner(df)
 cleaned_df = cleaner.clean()
 
@@ -108,6 +99,164 @@ ranking_column = numeric_columns[0] if numeric_columns else ""
 trend_column = numeric_columns[0] if numeric_columns else ""
 filter_value_a = 0.0
 filter_value_b = 0.0
+
+numpy_column_a = numeric_columns[0] if numeric_columns else ""
+numpy_column_b = (
+    numeric_columns[1] if len(numeric_columns) > 1 else numpy_column_a
+)
+numpy_threshold = 0.0
+numpy_category_column = (
+    numeric_columns[0] if numeric_columns else ""
+)
+
+def draw_numpy_statistics(data: pd.DataFrame) -> None:
+    """Task 1: Calculate mean, median, and std using explicit NumPy functions."""
+    global numpy_column_a
+    imgui.text("1. NumPy Basic Statistics")
+
+    numpy_column_a = draw_combo(
+        "Select target column", numeric_columns, numpy_column_a
+    )
+
+    if not numpy_column_a or numpy_column_a not in data.columns:
+        imgui.text("No valid numerical column selected.")
+        return
+
+    # Extract NumPy ndarray directly
+    arr = data[numpy_column_a].dropna().to_numpy()
+
+    if arr.size == 0:
+        imgui.text("Column contains no valid numeric values.")
+        return
+
+    # Task 1 NumPy operations
+    mean_val = np.mean(arr)
+    median_val = np.median(arr)
+    std_val = np.std(arr)
+
+    imgui.bullet_text(f"np.mean(): {mean_val:.4f}")
+    imgui.bullet_text(f"np.median(): {median_val:.4f}")
+    imgui.bullet_text(f"np.std(): {std_val:.4f}")
+
+
+def draw_numpy_normalization(data: pd.DataFrame) -> None:
+    """Task 2: Normalize numerical values using Min-Max normalization."""
+    imgui.text("2. Min-Max Normalization (NumPy)")
+
+    if not numpy_column_a or numpy_column_a not in data.columns:
+        return
+
+    arr = data[numpy_column_a].dropna().to_numpy()
+    min_val = np.min(arr)
+    max_val = np.max(arr)
+
+    if max_val == min_val:
+        imgui.text("Cannot normalize: min and max values are equal.")
+        return
+
+    # Task 2 Min-Max formula: (x - min) / (max - min)
+    normalized_arr = (arr - min_val) / (max_val - min_val)
+
+    imgui.bullet_text(f"Original Range: [{min_val:.2f}, {max_val:.2f}]")
+    imgui.bullet_text(
+        f"Normalized Range: [{np.min(normalized_arr):.2f}, {np.max(normalized_arr):.2f}]"
+    )
+
+    # Show snippet preview of first 5 normalized values
+    preview_rows = [
+        (f"Row {idx}", f"{orig:.4f}", f"{norm:.4f}")
+        for idx, (orig, norm) in enumerate(zip(arr[:5], normalized_arr[:5]))
+    ]
+    draw_table(["Row", "Original Value", "Normalized Value"], preview_rows)
+
+
+def draw_numpy_conditional(data: pd.DataFrame) -> None:
+    """Tasks 3 & 4: Identify threshold values and attach a new column using np.where()."""
+    global numpy_threshold, numpy_category_column
+    imgui.text("3 & 4. Thresholding & Conditional Column Creation (np.where)")
+
+    numpy_category_column = draw_combo(
+        "Target column", numeric_columns, numpy_category_column
+    )
+
+    if not numpy_category_column or numpy_category_column not in data.columns:
+        return
+
+    changed, numpy_threshold = imgui.input_float(
+        "Threshold Value", numpy_threshold
+    )
+
+    arr = data[numpy_category_column].to_numpy()
+
+    # Task 3: Identify values above/below threshold
+    above_mask = arr > numpy_threshold
+    above_count = np.count_nonzero(above_mask)
+    below_count = arr.size - above_count
+
+    imgui.bullet_text(f"Values above {numpy_threshold:.2f}: {above_count}")
+    imgui.bullet_text(f"Values at or below {numpy_threshold:.2f}: {below_count}")
+
+    # Task 4: Create new categorical indicator column using np.where()
+    new_col_name = f"{numpy_category_column}_category"
+    data[new_col_name] = np.where(arr > numpy_threshold, "High", "Low")
+
+    # Preview updated DataFrame with newly appended NumPy column
+    imgui.text(f"Updated DataFrame preview with column '{new_col_name}':")
+    preview_cols = [numpy_category_column, new_col_name]
+    preview_data = data[preview_cols].head(5).itertuples(index=False, name=None)
+    draw_table(preview_cols, preview_data)
+
+
+def draw_numpy_correlation(data: pd.DataFrame) -> None:
+    """Task 5: Calculate Pearson correlation matrix using np.corrcoef()."""
+    global numpy_column_a, numpy_column_b
+    imgui.text("5. Correlation Analysis (np.corrcoef)")
+
+    if len(numeric_columns) < 2:
+        imgui.text("Requires at least two numeric columns.")
+        return
+
+    numpy_column_a = draw_combo("Column A", numeric_columns, numpy_column_a)
+    numpy_column_b = draw_combo("Column B", numeric_columns, numpy_column_b)
+
+    if numpy_column_a == numpy_column_b:
+        imgui.text("Select two distinct columns to calculate correlation.")
+        return
+
+    # Clean missing values jointly across both columns for matrix math
+    clean_pair = data[[numpy_column_a, numpy_column_b]].dropna()
+    arr_a = clean_pair[numpy_column_a].to_numpy()
+    arr_b = clean_pair[numpy_column_b].to_numpy()
+
+    if arr_a.size == 0:
+        imgui.text("No valid common records between selected columns.")
+        return
+
+    # Task 5: Compute 2x2 correlation matrix
+    corr_matrix = np.corrcoef(arr_a, arr_b)
+    corr_val = corr_matrix[0, 1]
+
+    imgui.bullet_text(f"Pearson Correlation Coefficient: {corr_val:.4f}")
+
+    if np.isnan(corr_val):
+        imgui.text("Correlation is undefined (zero variance).")
+    elif abs(corr_val) > 0.7:
+        imgui.text("Pattern: Strong linear relationship detected.")
+    elif abs(corr_val) > 0.3:
+        imgui.text("Pattern: Moderate linear relationship detected.")
+    else:
+        imgui.text("Pattern: Weak or no linear relationship detected.")
+
+
+def draw_numpy_analysis() -> None:
+    """Main section handler for Part D."""
+    draw_numpy_statistics(cleaned_df)
+    imgui.separator()
+    draw_numpy_normalization(cleaned_df)
+    imgui.separator()
+    draw_numpy_conditional(cleaned_df)
+    imgui.separator()
+    draw_numpy_correlation(cleaned_df)
 
 def draw_section(title: str, content) -> None:
     if imgui.collapsing_header(title)[0]:
@@ -159,6 +308,21 @@ def draw_preview() -> None:
     imgui.columns(1)
 
 
+def format_cell(value, decimals: int = 4) -> str:
+    """Safely format floats to fixed decimals, while keeping integers and text untouched."""
+    try:
+        val_float = float(value)
+
+        # If it's a whole number (e.g. 4.0, 100.0), display as an integer without decimals
+        if val_float.is_integer():
+            return f"{int(val_float)}"
+
+        # Otherwise format with trailing zeros stripped (or fixed decimals)
+        return f"{val_float:.{decimals}f}".rstrip('0').rstrip('.')
+
+    except (ValueError, TypeError):
+        return str(value)
+
 def draw_table(headers: list[str], rows) -> None:
     """Render tabular data using ImGui's columns API."""
     if not headers:
@@ -175,7 +339,7 @@ def draw_table(headers: list[str], rows) -> None:
 
     for row in rows:
         for value in row:
-            imgui.text_unformatted(str(value))
+            imgui.text_unformatted(format_cell(value, decimals=4))
             imgui.next_column()
 
     imgui.columns(1)
@@ -399,12 +563,29 @@ def draw_data_analisys():
 
 
 def DrawUI() -> None:
-    imgui.begin("Data Cleaning")
+    viewport = imgui.get_main_viewport()
+
+    # Position window at top-left corner of viewport
+    imgui.set_next_window_position(viewport.pos.x, viewport.pos.y)
+    # Set window size to match full viewport width & height
+    imgui.set_next_window_size(viewport.size.x, viewport.size.y)
+
+    # Window flags to remove title bar, borders, and resizing grips
+    flags = (
+            imgui.WINDOW_NO_RESIZE |
+            imgui.WINDOW_NO_MOVE |
+            imgui.WINDOW_NO_COLLAPSE |
+            imgui.WINDOW_NO_BRING_TO_FRONT_ON_FOCUS |
+            imgui.WINDOW_NO_COLLAPSE
+    )
+
+    imgui.begin(CSV_FILE, flags=flags)
 
     draw_section("Explore Data", explore_data)
     draw_section("Cleaning Report", draw_report)
     draw_section("Cleaned Data Preview", draw_preview)
-    draw_section("Data Analisys", draw_data_analisys)
+    draw_section("Data Analysis", draw_data_analisys)
+    draw_section("Numpy Analysis", draw_numpy_analysis)
 
     imgui.end()
 
@@ -427,7 +608,7 @@ def main():
 
         DrawUI()
 
-        gl.glClearColor(1.0, 1.0, 1.0, 1)
+        gl.glClearColor(0.1, 0.1, 0.1, 1)
         gl.glClear(gl.GL_COLOR_BUFFER_BIT)
 
         imgui.render()
