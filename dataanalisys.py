@@ -14,6 +14,7 @@ from testwindow import show_test_window
 from imgui.integrations.glfw import GlfwRenderer
 from dataclasses import dataclass, field
 
+
 @dataclass
 class CleaningReport:
     missing_before: int = 0
@@ -21,6 +22,7 @@ class CleaningReport:
     duplicates_removed: int = 0
     imputed_columns: list[str] = field(default_factory=list)
     converted_columns: list[str] = field(default_factory=list)
+
 
 @dataclass
 class ExecutiveSummary:
@@ -39,6 +41,7 @@ class ExecutiveSummary:
 
     # E.4 Dynamic Conclusion
     conclusion_text: str = ""
+
 
 class DataCleaner:
 
@@ -92,8 +95,9 @@ class DataCleaner:
         self.convert_types()
         return self.data
 
+
 def generate_executive_summary(
-    df: pd.DataFrame, cleaner: DataCleaner
+        df: pd.DataFrame, cleaner: DataCleaner
 ) -> ExecutiveSummary:
     """Computes all stats and dynamic text strings ONCE."""
     summary = ExecutiveSummary()
@@ -267,6 +271,7 @@ def format_cell(value, decimals: int = 4) -> str:
     except (ValueError, TypeError):
         return str(value)
 
+
 def draw_table(headers: list[str], rows) -> None:
     """Render tabular data using ImGui's columns API."""
     if not headers:
@@ -288,6 +293,7 @@ def draw_table(headers: list[str], rows) -> None:
 
     imgui.columns(1)
 
+
 def draw_combo(label: str, options: list[str], current: str) -> str:
     """Display a combo box and return the selected option."""
     if not options:
@@ -302,13 +308,16 @@ def draw_combo(label: str, options: list[str], current: str) -> str:
     _, index = imgui.combo(label, index, options)
     return options[index]
 
+
 def draw_section(title: str, content) -> None:
     if imgui.collapsing_header(title)[0]:
         content()
 
+
 def draw_overview(data: pd.DataFrame) -> None:
     imgui.text(f"Rows: {data.shape[0]}")
     imgui.text(f"Columns: {data.shape[1]}")
+
 
 def draw_column_info(data: pd.DataFrame) -> None:
     metadata = pd.DataFrame(
@@ -323,6 +332,7 @@ def draw_column_info(data: pd.DataFrame) -> None:
         metadata.itertuples(index=False, name=None),
     )
 
+
 def draw_explore_data(state: AppState) -> None:
     imgui.text("Dataset Overview")
     draw_overview(state.cleaned_df)
@@ -335,6 +345,7 @@ def draw_explore_data(state: AppState) -> None:
 
     imgui.text("Column Information")
     draw_column_info(state.cleaned_df)
+
 
 def draw_report(state: AppState) -> None:
     report = state.cleaner.report
@@ -357,6 +368,7 @@ def draw_report(state: AppState) -> None:
     for column in report.converted_columns:
         imgui.bullet_text(column)
 
+
 def draw_preview(state: AppState) -> None:
     preview = state.cleaned_df.head()
     if preview.empty:
@@ -365,6 +377,7 @@ def draw_preview(state: AppState) -> None:
     draw_table(
         preview.columns.tolist(), preview.itertuples(index=False, name=None)
     )
+
 
 def draw_summary(state: AppState) -> None:
     imgui.text("Summary Statistics")
@@ -378,7 +391,8 @@ def draw_summary(state: AppState) -> None:
         summary.columns.tolist(), summary.itertuples(index=False, name=None)
     )
 
-def draw_filter(state:AppState) -> None:
+
+def draw_filter(state: AppState) -> None:
     imgui.text("Filter Rows (two conditions)")
 
     if len(state.numeric_columns) < 2:
@@ -402,7 +416,7 @@ def draw_filter(state:AppState) -> None:
     filtered = state.cleaned_df[
         (state.cleaned_df[state.filter_column_a] >= state.filter_value_a)
         & (state.cleaned_df[state.filter_column_b] >= state.filter_value_b)
-    ]
+        ]
 
     imgui.text(f"Matching rows: {len(filtered)}")
     draw_table(
@@ -410,13 +424,13 @@ def draw_filter(state:AppState) -> None:
         filtered.head(10).itertuples(index=False, name=None),
     )
 
+
 def draw_group_analysis(state: AppState) -> None:
     imgui.text("Group and Aggregate")
 
     if not state.category_columns or not state.numeric_columns:
         imgui.text("Requires a categorical and a numerical column.")
         return
-
 
     state.group_column = draw_combo("Group by", state.category_columns, state.group_column)
     state.aggregate_column = draw_combo(
@@ -438,6 +452,7 @@ def draw_group_analysis(state: AppState) -> None:
         grouped.head(20).itertuples(index=False, name=None),
     )
 
+
 def draw_top_five(state: AppState) -> None:
     imgui.text("Top Five Records")
 
@@ -449,6 +464,7 @@ def draw_top_five(state: AppState) -> None:
 
     top = state.cleaned_df.nlargest(5, state.ranking_column)
     draw_table(top.columns.tolist(), top.itertuples(index=False, name=None))
+
 
 def draw_trend(state: AppState) -> None:
     imgui.text("Trend / Pattern")
@@ -488,6 +504,7 @@ def draw_trend(state: AppState) -> None:
     else:
         imgui.text("Values show measurable variation.")
 
+
 def draw_data_analysis(state: AppState) -> None:
     imgui.text("1. Summary Statistics")
     draw_summary(state)
@@ -503,6 +520,7 @@ def draw_data_analysis(state: AppState) -> None:
 
     imgui.text("5. Trend / Pattern")
     draw_trend(state)
+
 
 # --- NumPy ---
 def draw_numpy_statistics(state: AppState, data: pd.DataFrame) -> None:
@@ -523,6 +541,7 @@ def draw_numpy_statistics(state: AppState, data: pd.DataFrame) -> None:
     imgui.bullet_text(f"np.mean(): {np.mean(arr):.4f}")
     imgui.bullet_text(f"np.median(): {np.median(arr):.4f}")
     imgui.bullet_text(f"np.std(): {np.std(arr):.4f}")
+
 
 def draw_numpy_normalization(state: AppState, data: pd.DataFrame) -> None:
     imgui.text("2. Min-Max Normalization (NumPy)")
@@ -549,6 +568,7 @@ def draw_numpy_normalization(state: AppState, data: pd.DataFrame) -> None:
         for idx, (orig, norm) in enumerate(zip(arr[:5], normalized_arr[:5]))
     ]
     draw_table(["Row", "Original Value", "Normalized Value"], preview_rows)
+
 
 def draw_numpy_conditional(state: AppState, data: pd.DataFrame) -> None:
     imgui.text("3 & 4. Thresholding & Conditional Column Creation (np.where)")
@@ -579,6 +599,7 @@ def draw_numpy_conditional(state: AppState, data: pd.DataFrame) -> None:
         preview_cols,
         data[preview_cols].head(5).itertuples(index=False, name=None),
     )
+
 
 def draw_numpy_correlation(state: AppState, data: pd.DataFrame) -> None:
     imgui.text("5. Correlation Analysis (np.corrcoef)")
@@ -614,6 +635,7 @@ def draw_numpy_correlation(state: AppState, data: pd.DataFrame) -> None:
     else:
         imgui.text("Pattern: Weak or no linear relationship detected.")
 
+
 def draw_numpy_analysis(state: AppState) -> None:
     draw_numpy_statistics(state, state.cleaned_df)
     imgui.separator()
@@ -622,6 +644,7 @@ def draw_numpy_analysis(state: AppState) -> None:
     draw_numpy_conditional(state, state.cleaned_df)
     imgui.separator()
     draw_numpy_correlation(state, state.cleaned_df)
+
 
 def draw_results_presentation(state: AppState) -> None:
     """Part E: Present dynamic summary metrics, text reports, findings, and conclusions."""
@@ -673,10 +696,10 @@ def draw_ui(state: AppState) -> None:
     imgui.set_next_window_size(viewport.size.x, viewport.size.y)
 
     flags = (
-        imgui.WINDOW_NO_RESIZE
-        | imgui.WINDOW_NO_MOVE
-        | imgui.WINDOW_NO_COLLAPSE
-        | imgui.WINDOW_NO_BRING_TO_FRONT_ON_FOCUS
+            imgui.WINDOW_NO_RESIZE
+            | imgui.WINDOW_NO_MOVE
+            | imgui.WINDOW_NO_COLLAPSE
+            | imgui.WINDOW_NO_BRING_TO_FRONT_ON_FOCUS
     )
 
     imgui.begin(state.csv_file, flags=flags)
@@ -689,6 +712,7 @@ def draw_ui(state: AppState) -> None:
     draw_section("Part E - Present Results", lambda: draw_results_presentation(state))
 
     imgui.end()
+
 
 def impl_glfw_init() -> None:
     width, height = 1280, 720
@@ -714,6 +738,7 @@ def impl_glfw_init() -> None:
     glfw.make_context_current(window)
     return window
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Interactive Data Cleaner and Explorer using PyImgui."
@@ -735,8 +760,59 @@ def setup_fonts():
     # On Windows: "C:\\Windows\\Fonts\\segoeui.ttf" or "arial.ttf"
     # On Linux: "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     io.fonts.add_font_from_file_ttf(
-        "JetBrainsMono-Medium.ttf", 23.0
+        "JetBrainsMono-Medium.ttf", 21.0
     )
+
+
+def setup_style() -> None:
+    style = imgui.get_style()
+
+    # --- Geometry & Spacing ---
+    style.window_padding = (16.0, 16.0)
+    style.frame_padding = (10.0, 6.0)
+    style.item_spacing = (10.0, 8.0)
+    style.item_inner_spacing = (6.0, 6.0)
+    style.indent_spacing = 20.0
+    style.scrollbar_size = 14.0
+    style.grab_min_size = 12.0
+
+    # --- Rounding ---
+    style.window_rounding = 8.0
+    style.child_rounding = 6.0
+    style.frame_rounding = 5.0
+    style.popup_rounding = 6.0
+    style.scrollbar_rounding = 8.0
+    style.grab_rounding = 4.0
+    style.tab_rounding = 5.0
+
+    # --- Colors (Slate / Charcoal Dark Theme) ---
+    colors = style.colors
+
+    # Backgrounds
+    colors[imgui.COLOR_WINDOW_BACKGROUND] = (0.11, 0.12, 0.14, 1.0)
+    colors[imgui.COLOR_CHILD_BACKGROUND] = (0.14, 0.15, 0.18, 1.0)
+    colors[imgui.COLOR_POPUP_BACKGROUND] = (0.14, 0.15, 0.18, 0.95)
+
+    # Frames & Inputs (Combo boxes, InputFloat, etc.)
+    colors[imgui.COLOR_FRAME_BACKGROUND] = (0.18, 0.20, 0.24, 1.0)
+    colors[imgui.COLOR_FRAME_BACKGROUND_HOVERED] = (0.24, 0.27, 0.33, 1.0)
+    colors[imgui.COLOR_FRAME_BACKGROUND_ACTIVE] = (0.28, 0.32, 0.39, 1.0)
+
+    # Headers (CollapsingHeader, Selectables)
+    colors[imgui.COLOR_HEADER] = (0.22, 0.25, 0.30, 1.0)
+    colors[imgui.COLOR_HEADER_HOVERED] = (0.30, 0.35, 0.43, 1.0)
+    colors[imgui.COLOR_HEADER_ACTIVE] = (0.35, 0.40, 0.50, 1.0)
+
+    # Accent Elements (Buttons, Sliders, Highlights)
+    colors[imgui.COLOR_BUTTON] = (0.20, 0.45, 0.70, 1.0)
+    colors[imgui.COLOR_BUTTON_HOVERED] = (0.26, 0.53, 0.80, 1.0)
+    colors[imgui.COLOR_BUTTON_ACTIVE] = (0.16, 0.38, 0.60, 1.0)
+
+    # Separators & Borders
+    colors[imgui.COLOR_BORDER] = (0.25, 0.28, 0.33, 0.5)
+    colors[imgui.COLOR_BORDER_SHADOW] = (0.0, 0.0, 0.0, 0.0)
+    colors[imgui.COLOR_SEPARATOR] = (0.25, 0.28, 0.33, 1.0)
+
 
 def main() -> None:
     args = parse_args()
@@ -747,7 +823,6 @@ def main() -> None:
         print(f"Error: File '{args.csv_file}' not found.", file=sys.stderr)
         sys.exit(1)
 
-
     imgui.create_context()
     window = impl_glfw_init()
     impl = GlfwRenderer(window)
@@ -756,6 +831,8 @@ def main() -> None:
     impl.refresh_font_texture()
 
     glfw.swap_interval(1)
+
+    setup_style()
 
     while not glfw.window_should_close(window):
         glfw.poll_events()
@@ -775,7 +852,6 @@ def main() -> None:
 
     impl.shutdown()
     glfw.terminate()
-
 
 
 if __name__ == "__main__":
