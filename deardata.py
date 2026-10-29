@@ -715,7 +715,7 @@ def draw_ui(state: AppState) -> None:
 
 def impl_glfw_init() -> None:
     width, height = 1280, 720
-    window_name = "Data Explorer"
+    window_name = "DearData - Data Explorer"
 
     if not glfw.init():
         print("Could not initialize OpenGL context")

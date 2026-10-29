@@ -1,3 +1,14 @@
+
+<p align="center">
+    <img src="screenshots/screen1.png" alt="drawing" width="600"/>
+</p>
+
+<p align="center">
+    <img src="screenshots/screen2.png" alt="drawing" width="900"/>
+</p>
+
+
+
 # Data Cleaning & Analytics GUI
 
 A Python desktop application that provides an interactive GUI for loading, cleaning, and analyzing tabular datasets
@@ -40,10 +51,10 @@ pip install uv
 git clone <repo-url> data-cleaning-gui
 cd data-cleaning-gui
 
-uv venv --python 3.1
+uv venv --python 3.12
 ```
 
-This creates a .venv/ directory using the default Python (or pass --python 3.11 to pin a version).
+This creates a .venv/ directory using Python 3.12.
 
 3. Activate the environment:
 
